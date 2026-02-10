@@ -6,8 +6,11 @@
 // @description  Tag users with label + color using an inline UI under profiles
 // @match        *://*/*
 // @grant        none
+// @grant        GM.getValue
+// @grant        GM.setValue
 // @downloadURL  https://github.com/yolotheswagnificent/XenForo-User-Tagger/raw/main/XenForoUserTagger.user.js
 // @updateURL    https://github.com/yolotheswagnificent/XenForo-User-Tagger/raw/main/XenForoUserTagger.user.js
+
 // ==/UserScript==
 
 function isXenForo() {
@@ -38,14 +41,11 @@ function isXenForo() {
     '#6c757d'
   ];
 
-  const loadTags = () =>
-    JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+  const loadTags = () => GM.getValue(STORAGE_KEY, {});      // returns Promise<object>
+  const saveTags = tags => GM.setValue(STORAGE_KEY, tags);  // returns Promise<void>
 
-  const saveTags = tags =>
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(tags));
-
-  function applyTags() {
-    const tags = loadTags();
+  async function applyTags() {
+    const tags = await loadTags();
 
     document.querySelectorAll('article.message').forEach(post => {
       const userSection = post.querySelector('.message-user[data-user-id]');
@@ -80,12 +80,12 @@ function isXenForo() {
     });
   }
 
-  function openTagEditor(userSection) {
+  async function openTagEditor(userSection) {
     const userId = userSection.dataset.userId;
     const username =
       userSection.querySelector('.username')?.textContent.trim() || 'user';
 
-    const tags = loadTags();
+    const tags = await loadTags();
     const existing = tags[userId] || { label: '', color: COLORS[0] };
 
     // Remove any existing editor
@@ -190,16 +190,16 @@ function isXenForo() {
       color: #fff;
     `;
 
-    saveBtn.onclick = () => {
+    saveBtn.onclick = async () => {
       if (!input.value.trim()) return;
       tags[userId] = { label: input.value.trim(), color: selectedColor };
-      saveTags(tags);
+      await saveTags(tags);
       location.reload();
     };
 
-    removeBtn.onclick = () => {
+    removeBtn.onclick = async () => {
       delete tags[userId];
-      saveTags(tags);
+      await saveTags(tags);
       location.reload();
     };
 
@@ -235,11 +235,11 @@ function isXenForo() {
     userSection.dataset.tagButtonAdded = 'true';
   }
 
-  function init() {
+  async function init() {
     document
       .querySelectorAll('.message-user[data-user-id]')
       .forEach(addTagButton);
-    applyTags();
+    await applyTags();
   }
 
   init();
