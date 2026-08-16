@@ -13,8 +13,7 @@
 // ==/UserScript==
 
 function isXenForo() {
-  // Common XenForo patterns (v1/v2 themes vary, but these are good heuristics)
-  return (
+  return !!(
     document.querySelector('article.message .message-user[data-user-id]') ||
     document.querySelector('article.message .messageUserBlock') ||
     document.querySelector('meta[name="generator"][content*="XenForo"]')
