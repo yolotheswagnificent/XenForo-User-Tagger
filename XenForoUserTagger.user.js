@@ -244,6 +244,111 @@ function isXenForo() {
     await applyTags();
   }
 
+  function createBackupUI() {
+    // Floating button
+    const wrapper = document.createElement('div');
+    wrapper.style.cssText = `
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      z-index: 9999;
+      font-family: sans-serif;
+    `;
+
+    const btn = document.createElement('button');
+    btn.textContent = '💾 Tags';
+    btn.title = 'Backup / restore tags';
+    btn.style.cssText = `
+      padding: 8px 12px;
+      border-radius: 6px;
+      border: none;
+      background: #222;
+      color: #eee;
+      cursor: pointer;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+    `;
+
+    const menu = document.createElement('div');
+    menu.style.cssText = `
+      position: absolute;
+      bottom: 110%;
+      right: 0;
+      width: 280px;
+      padding: 12px;
+      background: #1e1e1e;
+      border: 1px solid #444;
+      border-radius: 8px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.6);
+      display: none;
+      flex-direction: column;
+      gap: 8px;
+    `;
+
+    const exportBtn = document.createElement('button');
+    exportBtn.textContent = '📤 Export tags to file';
+    exportBtn.style.cssText = baseBtnStyle('#428bca', '#fff');
+
+    const importInput = document.createElement('input');
+    importInput.type = 'file';
+    importInput.accept = '.json,.txt';
+    importInput.style.display = 'none';
+
+    const importBtn = document.createElement('button');
+    importBtn.textContent = '📥 Import tags from file';
+    importBtn.style.cssText = baseBtnStyle('#5cb85c', '#fff');
+
+    exportBtn.onclick = async () => {
+      const tags = await loadTags();
+      const blob = new Blob([JSON.stringify(tags, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `forumUserTags.${location.hostname}.${new Date().toISOString().slice(0,10)}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    };
+
+    importBtn.onclick = () => importInput.click();
+
+    importInput.onchange = () => {
+      const file = importInput.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = async () => {
+        try {
+          const imported = JSON.parse(reader.result);
+          if (typeof imported !== 'object') throw new Error('Invalid file');
+          await saveTags(imported);
+          location.reload();
+        } catch (err) {
+          alert('Import failed: ' + err.message);
+        }
+      };
+      reader.readAsText(file);
+    };
+
+    function baseBtnStyle(bg, color) {
+      return `
+        padding: 6px;
+        background: ${bg};
+        color: ${color};
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+      `;
+    }
+
+    btn.onclick = () => {
+      menu.style.display = menu.style.display === 'none' ? 'flex' : 'none';
+    };
+
+    menu.append(exportBtn, importBtn);
+    wrapper.append(btn, menu, importInput);
+    document.body.appendChild(wrapper);
+  }
+
   init();
 
   let debounceTimer;
