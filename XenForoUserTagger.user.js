@@ -2,8 +2,8 @@
 // @name         XenForo User Tagger (Inline UI)
 // @namespace    xf-user-tagger-inline-ui
 // @author       yolotheswagnificent
-// @version      1.2.0
-// @description  Tag users with label + color using an inline UI under profiles, with quick tags
+// @version      2.0.0
+// @description  Tag users with multiple labels + colors using an inline UI under profiles, with quick tags
 // @match        *://*/*
 // @grant        GM.getValue
 // @grant        GM.setValue
@@ -29,17 +29,23 @@ function isXenForo() {
   const MAX_QUICK_TAGS = 12;
 
   const COLORS = [
-    '#d9534f', // red (default)
-    '#f0ad4e',
-    '#ffd23f',
-    '#5cb85c',
-    '#5bc0de',
-    '#428bca',
-    '#9b59b6',
-    '#6c757d'
+    '#d9534f', '#f0ad4e', '#ffd23f', '#5cb85c',
+    '#5bc0de', '#428bca', '#9b59b6', '#6c757d'
   ];
 
-  const loadTags = () => GM.getValue(STORAGE_KEY, {});
+  const loadTags = async () => {
+    const raw = await GM.getValue(STORAGE_KEY, {});
+    // Migrate old {label,color} to array
+    const migrated = {};
+    for (const [userId, data] of Object.entries(raw)) {
+      if (Array.isArray(data)) {
+        migrated[userId] = data;
+      } else if (data && typeof data === 'object' && data.label) {
+        migrated[userId] = [{ label: data.label, color: data.color }];
+      }
+    }
+    return migrated;
+  };
   const saveTags = tags => GM.setValue(STORAGE_KEY, tags);
   const loadQuickTags = () => GM.getValue(QUICK_TAGS_KEY, []);
   const saveQuickTags = tags => GM.setValue(QUICK_TAGS_KEY, tags);
@@ -52,29 +58,33 @@ function isXenForo() {
       if (!userSection) return;
 
       const userId = userSection.dataset.userId;
-      const tag = tags[userId];
-      if (!tag) return;
+      const userTags = tags[userId];
+      if (!Array.isArray(userTags) || userTags.length === 0) return;
 
-      post.style.borderLeft = `4px solid ${tag.color}`;
-      post.style.background = `${tag.color}22`;
+      const primaryColor = userTags[0].color;
+
+      post.style.borderLeft = `4px solid ${primaryColor}`;
+      post.style.background = `${primaryColor}22`;
 
       const username = userSection.querySelector('.username');
       if (username && !username.dataset.tagApplied) {
-        const badge = document.createElement('span');
-        badge.textContent = tag.label;
-        badge.style.cssText = `
-          margin-left: 4px;
-          padding: 2px 6px;
-          font-size: 11px;
-          font-weight: bold;
-          color: #fff;
-          background: ${tag.color};
-          border-radius: 4px;
-          display: inline-block;
-          max-width: 100%;
-          white-space: nowrap;
-        `;
-        username.after(badge);
+        userTags.forEach(tag => {
+          const badge = document.createElement('span');
+          badge.textContent = tag.label;
+          badge.style.cssText = `
+            margin-left: 4px;
+            padding: 2px 6px;
+            font-size: 11px;
+            font-weight: bold;
+            color: #fff;
+            background: ${tag.color};
+            border-radius: 4px;
+            display: inline-block;
+            max-width: 100%;
+            white-space: nowrap;
+          `;
+          username.after(badge);
+        });
         username.dataset.tagApplied = 'true';
       }
     });
@@ -86,13 +96,51 @@ function isXenForo() {
     });
   }
 
+  function createChip(tag, onRemove) {
+    const chip = document.createElement('div');
+    chip.style.cssText = `
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 3px 8px;
+      background: ${tag.color};
+      color: #fff;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: bold;
+      max-width: 100%;
+      white-space: nowrap;
+      cursor: default;
+    `;
+
+    const label = document.createElement('span');
+    label.textContent = tag.label;
+    label.style.cssText = `
+      overflow: hidden;
+      text-overflow: ellipsis;
+    `;
+
+    const remove = document.createElement('span');
+    remove.textContent = '×';
+    remove.title = 'Remove tag';
+    remove.style.cssText = `
+      cursor: pointer;
+      font-weight: bold;
+      opacity: 0.8;
+      margin-left: 2px;
+    `;
+    remove.addEventListener('click', onRemove);
+
+    chip.append(label, remove);
+    return chip;
+  }
+
   async function openTagEditor(userSection) {
     const userId = userSection.dataset.userId;
-    const username =
-      userSection.querySelector('.username')?.textContent.trim() || 'user';
+    const username = userSection.querySelector('.username')?.textContent.trim() || 'user';
 
     const tags = await loadTags();
-    const existing = tags[userId] || { label: '', color: COLORS[0] };
+    let userTags = tags[userId] || [];
 
     document.querySelectorAll('.tag-editor').forEach(e => e.remove());
 
@@ -114,13 +162,51 @@ function isXenForo() {
       box-shadow: 0 8px 24px rgba(0,0,0,0.6);
     `;
 
+    // --- Current Tags ---
+    const currentTagsLabel = document.createElement('div');
+    currentTagsLabel.textContent = `Tags for ${username}:`;
+    currentTagsLabel.style.cssText = `margin-bottom: 6px; font-weight: bold; color: #aaa;`;
+
+    const currentTagsList = document.createElement('div');
+    currentTagsList.style.cssText = `
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-bottom: 10px;
+      min-height: 22px;
+    `;
+
+    async function renderCurrentTags() {
+      currentTagsList.innerHTML = '';
+      if (userTags.length === 0) {
+        const empty = document.createElement('div');
+        empty.textContent = 'No tags yet.';
+        empty.style.color = '#777';
+        currentTagsList.appendChild(empty);
+        return;
+      }
+
+      userTags.forEach((tag, index) => {
+        const chip = createChip(tag, async () => {
+          userTags.splice(index, 1);
+          tags[userId] = userTags;
+          await saveTags(tags);
+          await applyTags();
+          renderCurrentTags();
+        });
+        currentTagsList.appendChild(chip);
+      });
+    }
+
+    renderCurrentTags();
+
+    // --- New Tag Input ---
     const input = document.createElement('input');
     input.type = 'text';
-    input.placeholder = `Tag for ${username}`;
-    input.value = existing.label;
+    input.placeholder = 'New tag label';
     input.style.cssText = `
       width: 100%;
-      margin-bottom: 6px;
+      margin-bottom: 8px;
       padding: 4px;
       background: #2b2b2b;
       color: #fff;
@@ -136,7 +222,7 @@ function isXenForo() {
       margin-bottom: 10px;
     `;
 
-    let selectedColor = existing.color;
+    let selectedColor = COLORS[0];
 
     COLORS.forEach(color => {
       const swatch = document.createElement('div');
@@ -156,7 +242,7 @@ function isXenForo() {
       colorRow.appendChild(swatch);
     });
 
-    // --- Quick Tags Section ---
+    // --- Quick Tags ---
     const quickTagsSection = document.createElement('div');
     quickTagsSection.style.cssText = `
       margin-bottom: 10px;
@@ -165,12 +251,8 @@ function isXenForo() {
     `;
 
     const quickTagsLabel = document.createElement('div');
-    quickTagsLabel.textContent = 'Quick Tags:';
-    quickTagsLabel.style.cssText = `
-      margin-bottom: 6px;
-      font-weight: bold;
-      color: #aaa;
-    `;
+    quickTagsLabel.textContent = 'Quick Tags (click to add):';
+    quickTagsLabel.style.cssText = `margin-bottom: 6px; font-weight: bold; color: #aaa;`;
 
     const quickTagsList = document.createElement('div');
     quickTagsList.style.cssText = `
@@ -197,7 +279,7 @@ function isXenForo() {
       quickTags.forEach((qt, index) => {
         const chip = document.createElement('div');
         chip.style.cssText = `
-          display: flex;
+          display: inline-flex;
           align-items: center;
           gap: 4px;
           padding: 3px 8px;
@@ -212,19 +294,18 @@ function isXenForo() {
 
         const label = document.createElement('span');
         label.textContent = qt.label;
-        label.style.cssText = `
-          flex: 1;
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
-        `;
+        label.style.whiteSpace = 'nowrap';
 
         chip.appendChild(label);
 
-        chip.addEventListener('click', () => {
-          input.value = qt.label;
-          selectedColor = qt.color;
-          updateSwatchOutlines(colorRow, selectedColor);
+        chip.addEventListener('click', async () => {
+          const exists = userTags.some(t => t.label === qt.label && t.color === qt.color);
+          if (exists) return;
+          userTags.push({ label: qt.label, color: qt.color });
+          tags[userId] = userTags;
+          await saveTags(tags);
+          await applyTags();
+          renderCurrentTags();
         });
 
         const deleteBtn = document.createElement('span');
@@ -263,11 +344,9 @@ function isXenForo() {
     saveQuickBtn.onclick = async () => {
       const label = input.value.trim();
       if (!label) return;
-
       const current = await loadQuickTags();
       const exists = current.some(qt => qt.label === label && qt.color === selectedColor);
       if (exists) return;
-
       if (current.length >= MAX_QUICK_TAGS) current.shift();
       current.push({ label, color: selectedColor });
       await saveQuickTags(current);
@@ -276,14 +355,14 @@ function isXenForo() {
 
     quickTagsSection.append(quickTagsLabel, quickTagsList, saveQuickBtn);
     renderQuickTags();
-    // --- End Quick Tags Section ---
 
+    // --- Buttons ---
     const buttons = document.createElement('div');
     buttons.style.cssText = `display: flex; gap: 6px; margin-top: 10px;`;
 
-    const saveBtn = document.createElement('button');
-    saveBtn.textContent = 'Save';
-    saveBtn.style.cssText = `
+    const addBtn = document.createElement('button');
+    addBtn.textContent = 'Add Tag';
+    addBtn.style.cssText = `
       padding: 4px 8px;
       background: #5cb85c;
       border: none;
@@ -292,20 +371,9 @@ function isXenForo() {
       color: #000;
     `;
 
-    const removeBtn = document.createElement('button');
-    removeBtn.textContent = 'Remove';
-    removeBtn.style.cssText = `
-      padding: 4px 8px;
-      background: #d9534f;
-      border: none;
-      border-radius: 4px;
-      cursor: pointer;
-      color: #fff;
-    `;
-
-    const cancelBtn = document.createElement('button');
-    cancelBtn.textContent = 'Cancel';
-    cancelBtn.style.cssText = `
+    const closeBtn = document.createElement('button');
+    closeBtn.textContent = 'Close';
+    closeBtn.style.cssText = `
       padding: 4px 8px;
       background: #6c757d;
       border: none;
@@ -314,28 +382,29 @@ function isXenForo() {
       color: #fff;
     `;
 
-    saveBtn.onclick = async () => {
-      if (!input.value.trim()) return;
-      saveBtn.disabled = true;
-      removeBtn.disabled = true;
-      tags[userId] = { label: input.value.trim(), color: selectedColor };
-      await saveTags(tags);
-      location.reload();
-    };
+    async function addCurrentTag() {
+      const label = input.value.trim();
+      if (!label) return;
+      const exists = userTags.some(t => t.label === label && t.color === selectedColor);
+      if (!exists) {
+        userTags.push({ label, color: selectedColor });
+        tags[userId] = userTags;
+        await saveTags(tags);
+        await applyTags();
+        renderCurrentTags();
+      }
+      input.value = '';
+    }
 
-    removeBtn.onclick = async () => {
-      saveBtn.disabled = true;
-      removeBtn.disabled = true;
-      delete tags[userId];
-      await saveTags(tags);
-      location.reload();
-    };
+    addBtn.onclick = addCurrentTag;
+    input.addEventListener('keydown', e => {
+      if (e.key === 'Enter') addCurrentTag();
+    });
+    closeBtn.onclick = () => editor.remove();
 
-    cancelBtn.onclick = () => editor.remove();
+    buttons.append(addBtn, closeBtn);
 
-    buttons.append(saveBtn, removeBtn, cancelBtn);
-
-    editor.append(input, colorRow, quickTagsSection, buttons);
+    editor.append(currentTagsLabel, currentTagsList, input, colorRow, quickTagsSection, buttons);
     userSection.appendChild(editor);
   }
 
@@ -357,16 +426,12 @@ function isXenForo() {
 
     btn.onclick = () => openTagEditor(userSection);
 
-    (userSection.querySelector('.message-userExtras') || userSection)
-      .appendChild(btn);
-
+    (userSection.querySelector('.message-userExtras') || userSection).appendChild(btn);
     userSection.dataset.tagButtonAdded = 'true';
   }
 
   async function init() {
-    document
-      .querySelectorAll('.message-user[data-user-id]')
-      .forEach(addTagButton);
+    document.querySelectorAll('.message-user[data-user-id]').forEach(addTagButton);
     await applyTags();
   }
 
