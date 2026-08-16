@@ -23,7 +23,7 @@ function isXenForo() {
 (function () {
   'use strict';
 
-  //Stop here if not XenForo
+  // Stop here if not XenForo
   if (!isXenForo()) return;
 
   const STORAGE_KEY = `forumUserTags:${location.hostname}`;
@@ -86,8 +86,8 @@ function isXenForo() {
     const tags = await loadTags();
     const existing = tags[userId] || { label: '', color: COLORS[0] };
 
-    // Remove any existing editor
-    userSection.querySelector('.tag-editor')?.remove();
+    // Remove any existing editor anywhere on the page
+    document.querySelectorAll('.tag-editor').forEach(e => e.remove());
 
     const editor = document.createElement('div');
     editor.className = 'tag-editor';
@@ -190,12 +190,16 @@ function isXenForo() {
 
     saveBtn.onclick = async () => {
       if (!input.value.trim()) return;
+      saveBtn.disabled = true;
+      removeBtn.disabled = true;
       tags[userId] = { label: input.value.trim(), color: selectedColor };
       await saveTags(tags);
       location.reload();
     };
 
     removeBtn.onclick = async () => {
+      saveBtn.disabled = true;
+      removeBtn.disabled = true;
       delete tags[userId];
       await saveTags(tags);
       location.reload();
@@ -242,9 +246,14 @@ function isXenForo() {
 
   init();
 
-  new MutationObserver(init).observe(document.body, {
+  let debounceTimer;
+  const observer = new MutationObserver(() => {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(init, 50);
+  });
+
+  observer.observe(document.body, {
     childList: true,
     subtree: true
   });
-
 })();
