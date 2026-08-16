@@ -5,11 +5,10 @@
 // @version      1.1.1
 // @description  Tag users with label + color using an inline UI under profiles
 // @match        *://*/*
-// @grant        none
 // @grant        GM.getValue
 // @grant        GM.setValue
-// @downloadURL  https://github.com/yolotheswagnificent/XenForo-User-Tagger/raw/main/XenForoUserTagger.user.js
-// @updateURL    https://github.com/yolotheswagnificent/XenForo-User-Tagger/raw/main/XenForoUserTagger.user.js
+// @downloadURL  https://github.com/yolotheswagnificent/XenForo-User-Tagger/raw/refs/heads/main/XenForoUserTagger.user.js
+// @updateURL    https://github.com/yolotheswagnificent/XenForo-User-Tagger/raw/refs/heads/main/XenForoUserTagger.user.js
 
 // ==/UserScript==
 
