@@ -2,7 +2,7 @@
 // @name         XenForo User Tagger (Inline UI)
 // @namespace    xf-user-tagger-inline-ui
 // @author       yolotheswagnificent
-// @version      1.1.2
+// @version      1.1.3
 // @description  Tag users with label + color using an inline UI under profiles
 // @match        *://*/*
 // @grant        GM.getValue
@@ -350,6 +350,7 @@ function isXenForo() {
   }
 
   init();
+  createBackupUI();
 
   let debounceTimer;
   const observer = new MutationObserver(() => {
